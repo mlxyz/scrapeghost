@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 import openai
 import openai.error
+import os
 from typing import Callable
 
 from .errors import (
@@ -19,6 +20,14 @@ from .utils import (
     _max_tokens,
     _tokens,
 )
+
+if 'AZURE_OPENAI_KEY' in os.environ:
+    logger.info('Using Azure OpenAI')
+    openai.api_type = 'azure'
+    openai.api_key = os.environ['AZURE_OPENAI_KEY']
+    openai.api_base = os.environ['AZURE_OPENAI_ENDPOINT']
+    openai.api_version = "2023-03-15-preview"
+
 
 Postprocessor = Callable[[Response, "OpenAiCall"], Response]
 
@@ -45,6 +54,7 @@ class OpenAiCall:
         *,
         # OpenAI parameters
         models: list[str] = ["gpt-3.5-turbo", "gpt-4"],
+        deployment_id: str,
         model_params: dict | None = None,
         max_cost: float = 1,
         # instructions
@@ -58,6 +68,7 @@ class OpenAiCall:
         self.total_cost: float = 0
         self.max_cost = max_cost
         self.models = models
+        self.deployment_id = deployment_id
         self.retry = retry
         if model_params is None:
             model_params = {}
@@ -76,7 +87,7 @@ class OpenAiCall:
             self.postprocessors = postprocessors
 
     def _raw_api_request(
-        self, model: str, messages: list[dict[str, str]], response: Response
+        self, model: str, deployment_id: str, messages: list[dict[str, str]], response: Response
     ) -> Response:
         """
         Make an OpenAPI request and return the raw response.
@@ -94,8 +105,8 @@ class OpenAiCall:
             )
         start_t = time.time()
         completion = openai.ChatCompletion.create(
-            model=model,
             messages=messages,
+            deployment_id=deployment_id,
             **self.model_params,
         )
         elapsed = time.time() - start_t
@@ -141,6 +152,7 @@ class OpenAiCall:
         attempts = 0
         model_index = 0
         model = self.models[model_index]
+        deployment_id = self.deployment_id
 
         response = Response()
 
@@ -159,9 +171,13 @@ class OpenAiCall:
                     "API request",
                     model=model,
                     html_tokens=tokens,
+                    deployment_id=deployment_id,
+                    base=openai.api_base,
+                    version=openai.api_version,
                 )
                 self._raw_api_request(
                     model=model,
+                    deployment_id=deployment_id,
                     messages=[
                         {"role": "system", "content": msg}
                         for msg in self.system_messages
