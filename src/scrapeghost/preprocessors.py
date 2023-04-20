@@ -16,7 +16,8 @@ class CleanHTML:
     def __init__(self, **kwargs: dict) -> None:
         # need to set remove_unknown_tags to False since lxml.html seems to
         # have an outdated list of tags
-        self.cleaner = lxml.html.clean.Cleaner(**kwargs, remove_unknown_tags=False)
+        self.cleaner = lxml.html.clean.Cleaner(
+            **kwargs, remove_unknown_tags=False)
 
     def __str__(self) -> str:
         return "CleanHTML"
@@ -54,3 +55,20 @@ class CSS:
 
     def __call__(self, node: lxml.html.HtmlElement) -> list[lxml.html.HtmlElement]:
         return node.cssselect(self.css)
+
+
+class CSSUnified:
+    """
+    Given a CSS selector, return a single node with all the selected nodes.
+    """
+
+    def __init__(self, css: str):
+        self.css = css
+
+    def __str__(self) -> str:
+        return f"CSSUnified({self.css})"
+
+    def __call__(self, node: lxml.html.HtmlElement) -> list[lxml.html.HtmlElement]:
+        nodes = node.cssselect(self.css)
+        combined_node = lxml.html.HtmlElement(*nodes)
+        return combined_node
