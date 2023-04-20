@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import json
+import unicodedata
 from pydantic import ValidationError
 
 from .utils import logger, _tostr
@@ -22,7 +23,8 @@ class JSONPostprocessor:
 
     def __call__(self, response: Response, scraper: OpenAiCall) -> Response:
         if not isinstance(response.data, str):
-            raise PostprocessingError(f"Response data is not a string: {response.data}")
+            raise PostprocessingError(
+                f"Response data is not a string: {response.data}")
 
         try:
             response.data = json.loads(response.data)
@@ -55,7 +57,8 @@ class JSONPostprocessor:
                         f"{scraper.json_schema}"
                     ),
                 },
-                {"role": "system", "content": ("Only reply with JSON, nothing else. ")},
+                {"role": "system", "content": (
+                    "Only reply with JSON, nothing else. ")},
                 {"role": "user", "content": "{'bad': 'json', }"},
                 {"role": "assistant", "content": '{"bad": "json"}'},
                 # response.data is always a string here
@@ -81,7 +84,8 @@ class PydanticPostprocessor:
         try:
             response.data = self.pydantic_model(**response.data)
         except ValidationError as e:
-            logger.error("pydantic validation error", error=e, data=response.data)
+            logger.error("pydantic validation error",
+                         error=e, data=response.data)
             raise
 
         return response
@@ -126,4 +130,26 @@ def _check_data_in_html(html: str, d: dict | list | str, parent: str = "") -> No
             _check_data_in_html(html, v, parent + f"[{i}]")
     elif isinstance(d, str):
         if d not in html:
-            raise PostprocessingError(f"Data not found in html: {d} ({parent})")
+            raise PostprocessingError(
+                f"Data not found in html: {d} ({parent})")
+
+
+class UnicodeNormalize:
+    """
+    Given a string, return a normalized string.
+    """
+
+    def __init__(self, form='NFC') -> None:
+        self.form = form
+
+    def __str__(self) -> str:
+        return "UnicodeNormalize"
+
+    def __call__(self, response: Response, scraper: OpenAiCall) -> Response:
+        if not isinstance(response.data, str):
+            raise PostprocessingError(
+                "UnicodeNormalize expects a string, "
+                "Incompatible with auto_split_length"
+            )
+        response.data = unicodedata.normalize(self.form, response.data)
+        return response
